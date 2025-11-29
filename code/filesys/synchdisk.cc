@@ -32,6 +32,9 @@ SynchDisk::SynchDisk(char* name)
     semaphore = new Semaphore("synch disk", 0);
     lock = new Lock("synch disk lock");
     disk = new Disk(name, this);
+    for (int i = 0; i < NumSectors; i++) {
+        used[i] = false;
+    }
 }
 
 //----------------------------------------------------------------------
@@ -81,6 +84,14 @@ SynchDisk::WriteSector(int sectorNumber, char* data)
     disk->WriteRequest(sectorNumber, data);
     semaphore->P();			// wait for interrupt
     lock->Release();
+}
+
+int SynchDisk::requestSector() {
+    for (int i = 0; i < NumSectors; i++) {
+        if (used[i]) continue;
+        used[i] = true;
+        return i;
+    }
 }
 
 //----------------------------------------------------------------------

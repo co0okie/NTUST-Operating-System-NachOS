@@ -39,6 +39,8 @@ class SynchDisk : public CallBackObj {
     					// Disk::ReadRequest/WriteRequest and
 					// then wait until the request is done.
     void WriteSector(int sectorNumber, char* data);
+
+    int requestSector();
     
     void CallBack();			// Called by the disk device interrupt
 					// handler, to signal that the
@@ -50,6 +52,7 @@ class SynchDisk : public CallBackObj {
 					// with the interrupt handler
     Lock *lock;		  		// Only one read/write request
 					// can be sent to the disk at a time
+    bool used[NumSectors];
 };
 
 #endif // SYNCHDISK_H

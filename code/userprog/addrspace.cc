@@ -85,6 +85,33 @@ AddrSpace::~AddrSpace()
    delete pageTable;
 }
 
+// load segment into memory or disk swap memory
+void loadSegment(Segment segment, OpenFile* executable, TranslationEntry *pageTable) {
+    int readBeginVirAddr = segment.virtualAddr;
+    int codeEndVirAddr = segment.virtualAddr + segment.size;
+    for (;readBeginVirAddr < codeEndVirAddr;) {
+        int pageEndVirAddr = (readBeginVirAddr / PageSize + 1) * PageSize;
+        int vpn = readBeginVirAddr / PageSize;
+        int readEndVirAddr = min(codeEndVirAddr, pageEndVirAddr);
+        int size = readEndVirAddr - readBeginVirAddr;
+        int position = segment.inFileAddr + readBeginVirAddr - segment.virtualAddr;
+        if (pageTable[vpn].valid) { // load into memory
+            int ppn = pageTable[vpn].physicalPage;
+            int physicalAddr = ppn * PageSize + readBeginVirAddr % PageSize;
+            executable->ReadAt(
+                &kernel->machine->mainMemory[physicalAddr],
+                size, position
+            );
+        } else { // load into disk swap memory
+            char data[PageSize];
+            kernel->disk->ReadSector(pageTable[vpn].physicalPage, data);
+            char* readBegin = data + readBeginVirAddr % PageSize;
+            executable->ReadAt(readBegin, size, position);
+            kernel->disk->WriteSector(pageTable[vpn].physicalPage, data);
+        }
+        readBeginVirAddr = readEndVirAddr;
+    }
+}
 
 //----------------------------------------------------------------------
 // AddrSpace::Load
@@ -126,12 +153,22 @@ AddrSpace::Load(char *fileName)
         pageTable[i].virtualPage = i;
         while(j<NumPhysPages && AddrSpace::usedPhyPage[j] == true)
             j++;
-        AddrSpace::usedPhyPage[j] = true;
-        pageTable[i].physicalPage = j;
-        pageTable[i].valid = true;
-        pageTable[i].use = false;
-        pageTable[i].dirty = false;
-        pageTable[i].readOnly = false;
+        if (j >= NumPhysPages) {
+            unsigned int sectorNo = kernel->disk->requestSector();
+            pageTable[i].physicalPage = sectorNo; // disk sector number
+            pageTable[i].valid = false;
+            pageTable[i].use = false;
+            pageTable[i].dirty = false;
+            pageTable[i].readOnly = false;
+        } else {
+            AddrSpace::usedPhyPage[j] = true;
+            pageTable[i].physicalPage = j;
+            kernel->coreMapEntry[j] = &pageTable[i];
+            pageTable[i].valid = true;
+            pageTable[i].use = false;
+            pageTable[i].dirty = false;
+            pageTable[i].readOnly = false;
+        }
     }
 
     size = numPages * PageSize;
@@ -147,16 +184,12 @@ AddrSpace::Load(char *fileName)
 	if (noffH.code.size > 0) {
         DEBUG(dbgAddr, "Initializing code segment.");
 	DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
-        	executable->ReadAt(
-		&(kernel->machine->mainMemory[pageTable[noffH.code.virtualAddr/PageSize].physicalPage * PageSize + (noffH.code.virtualAddr%PageSize)]), 
-			noffH.code.size, noffH.code.inFileAddr);
+        loadSegment(noffH.code, executable, pageTable);
     }
 	if (noffH.initData.size > 0) {
         DEBUG(dbgAddr, "Initializing data segment.");
 	DEBUG(dbgAddr, noffH.initData.virtualAddr << ", " << noffH.initData.size);
-        executable->ReadAt(
-		&(kernel->machine->mainMemory[pageTable[noffH.initData.virtualAddr/PageSize].physicalPage * PageSize + (noffH.code.virtualAddr%PageSize)]),
-			noffH.initData.size, noffH.initData.inFileAddr);
+        loadSegment(noffH.initData, executable, pageTable);
     }
 
     delete executable;			// close file

@@ -85,7 +85,8 @@ ExceptionHandler(ExceptionType which)
 	    }
 	    break;
 	case PageFaultException:
-		/*    Page Fault Exception    */
+        kernel->stats->numPageFaults++;
+        return;
 	    break;
 	default:
 	    cerr << "Unexpected user mode exception" << which << "\n";

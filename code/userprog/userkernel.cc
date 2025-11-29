@@ -61,6 +61,11 @@ UserProgKernel::Initialize()
 #ifdef FILESYS
     synchDisk = new SynchDisk("New SynchDisk");
 #endif // FILESYS
+    disk = new SynchDisk("Swap Memory");
+    for (int i = 0; i < NumPhysPages; i++) {
+        coreMapEntry[i] = nullptr;
+    }
+    nextSwapPage = 0;
 }
 
 //----------------------------------------------------------------------
@@ -76,6 +81,7 @@ UserProgKernel::~UserProgKernel()
 #ifdef FILESYS
     delete synchDisk;
 #endif
+    delete disk;
 }
 
 //----------------------------------------------------------------------

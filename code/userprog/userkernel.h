@@ -37,6 +37,10 @@ class UserProgKernel : public ThreadedKernel {
     SynchDisk *synchDisk;
 #endif // FILESYS
 
+    SynchDisk* disk;
+    TranslationEntry* coreMapEntry[NumPhysPages];
+    int nextSwapPage;
+
   private:
     bool debugUserProg;		// single step user program
 	Thread* t[10];
