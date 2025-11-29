@@ -12,9 +12,11 @@ nachos
 coff2noff
 
 # test folder
-#/code/test/*.c
-#/code/test/*
-#/code/test/halt
+/code/test/*
+!/code/test/*.c
+!/code/test/*.h
+!/code/test/*.s
+!/code/test/Makefile
 
 # Temp file
 *.swp
