@@ -64,7 +64,7 @@ AddrSpace::AddrSpace()
 //	pageTable[i].physicalPage = 0;
 	pageTable[i].valid = TRUE;
 //	pageTable[i].valid = FALSE;
-	pageTable[i].use = FALSE;
+	pageTable[i].use = 0;
 	pageTable[i].dirty = FALSE;
 	pageTable[i].readOnly = FALSE;  
     }
@@ -174,7 +174,7 @@ AddrSpace::Load(char *fileName)
             unsigned int sectorNo = kernel->disk->requestSector();
             pageTable[i].physicalPage = sectorNo; // disk sector number
             pageTable[i].valid = false;
-            pageTable[i].use = false;
+            pageTable[i].use = 0;
             pageTable[i].dirty = false;
             pageTable[i].readOnly = false;
             DEBUG(dbgVM, "vpn " << i << " -> sector " << sectorNo);
@@ -183,7 +183,7 @@ AddrSpace::Load(char *fileName)
             pageTable[i].physicalPage = j;
             kernel->coreMapEntry[j] = &pageTable[i];
             pageTable[i].valid = true;
-            pageTable[i].use = false;
+            pageTable[i].use = 0;
             pageTable[i].dirty = false;
             pageTable[i].readOnly = false;
             DEBUG(dbgVM, "vpn " << i << " -> ppn " << j);
@@ -286,8 +286,6 @@ AddrSpace::InitRegisters()
 
 void AddrSpace::SaveState() 
 {
-    DEBUG(dbgVM, "pageTable = " << kernel->machine->pageTable
-        << " -> " << pageTable);
         pageTable=kernel->machine->pageTable;
         numPages=kernel->machine->pageTableSize;
 }
@@ -302,8 +300,6 @@ void AddrSpace::SaveState()
 
 void AddrSpace::RestoreState() 
 {
-    DEBUG(dbgVM, "kernel->machine->pageTable = " << kernel->machine->pageTable
-        << " -> " << pageTable);
     kernel->machine->pageTable = pageTable;
     kernel->machine->pageTableSize = numPages;
 }

@@ -16,6 +16,12 @@
 #include "filesys.h"
 #include "machine.h"
 #include "synchdisk.h"
+
+enum class PageReplacementType {
+    FIFO,
+    LRU
+};
+
 class SynchDisk;
 class UserProgKernel : public ThreadedKernel {
   public:
@@ -40,6 +46,7 @@ class UserProgKernel : public ThreadedKernel {
     SynchDisk* disk;
     TranslationEntry* coreMapEntry[NumPhysPages];
     int nextSwapPage;
+    PageReplacementType pageReplacementType;
 
   private:
     bool debugUserProg;		// single step user program

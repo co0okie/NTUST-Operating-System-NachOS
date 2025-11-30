@@ -166,13 +166,53 @@ Machine::WriteMem(int addr, int size, int value)
     return TRUE;
 }
 
+int getPageToSwapFIFO() {
+    int pageToSwap = kernel->nextSwapPage;
+    kernel->nextSwapPage = (kernel->nextSwapPage + 1) % NumPhysPages;
+    return pageToSwap;
+}
+
+int getPageToSwapLRU() {
+    size_t lruUse = -1ull;
+    int lruPpn = -1;
+    for (unsigned int i = 0; i < NumPhysPages; i++) {
+        TranslationEntry* entry = kernel->coreMapEntry[i];
+        if (!entry) { // free page
+            lruPpn = i;
+            break;
+        }
+        if (entry->use < lruUse) {
+            lruUse = entry->use;
+            lruPpn = i;
+        }
+    }
+    for (unsigned int i = 0; i < NumPhysPages; i++) {
+        TranslationEntry* entry = kernel->coreMapEntry[i];
+        if (entry) {
+            DEBUG(dbgVM, "ppn " << i << " use " << entry->use);
+            entry->use = 0;
+        }
+    }
+    return lruPpn;
+}
+
 void handlePageFault(int virtAddr, TranslationEntry* pageTable, unsigned int vpn) {
     DEBUG(dbgAddr, "Page Fault at # " << virtAddr);
     cerr << "page fault" << endl;
-    TranslationEntry* entry = kernel->coreMapEntry[kernel->nextSwapPage];
-    int pageToSwap = kernel->nextSwapPage;
+    int pageToSwap;
+    switch (kernel->pageReplacementType) {
+        case PageReplacementType::LRU:
+            pageToSwap = getPageToSwapLRU();
+            break;
+        case PageReplacementType::FIFO:
+        default:
+            pageToSwap = getPageToSwapFIFO();
+    }
+    TranslationEntry* entry = kernel->coreMapEntry[pageToSwap];
     int sectorToSwap = pageTable[vpn].physicalPage;
-    kernel->nextSwapPage = (kernel->nextSwapPage + 1) % NumPhysPages;
+    if (kernel->pageReplacementType == PageReplacementType::LRU) {
+        pageTable[vpn].use = 0;
+    }
     if (entry) { // need to swap
         cerr << "vpn " << vpn << " is at sector " 
             << pageTable[vpn].physicalPage << ", swap with vpn " 
@@ -294,7 +334,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 	DEBUG(dbgAddr, "Illegal pageframe " << pageFrame);
 	return BusErrorException;
     }
-    entry->use = TRUE;		// set the use, dirty bits
+    entry->use++;		// set the use, dirty bits
     if (writing)
 	entry->dirty = TRUE;
     *physAddr = pageFrame * PageSize + offset;

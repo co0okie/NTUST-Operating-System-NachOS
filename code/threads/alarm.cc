@@ -54,9 +54,10 @@ Alarm::CallBack()
     
     kernel->currentThread->setPriority(kernel->currentThread->getPriority() - 1);
     if (status == IdleMode) {	// is it time to quit?
-        if (!interrupt->AnyFutureInterrupts()) {
-	    timer->Disable();	// turn off the timer
-	}
+        if (!interrupt->AnyFutureInterrupts() && !kernel->scheduler->HasNextToRun()) {
+            timer->Disable();	// turn off the timer
+            DEBUG(dbgVM, "timer disable");
+        }
     } else {			// there's someone to preempt
 	if(kernel->scheduler->getSchedulerType() == RR ||
             kernel->scheduler->getSchedulerType() == Priority ) {
