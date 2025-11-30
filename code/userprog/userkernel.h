@@ -22,6 +22,14 @@ enum class PageReplacementType {
     LRU
 };
 
+struct CoreMapEntry {
+    Thread* ownerThread;
+    int vpn; // virtual page number
+    unsigned long long use;
+    // if lock = 1, this page is being swapped in so cannot be replaced
+    bool lock;
+};
+
 class SynchDisk;
 class UserProgKernel : public ThreadedKernel {
   public:
@@ -44,7 +52,7 @@ class UserProgKernel : public ThreadedKernel {
 #endif // FILESYS
 
     SynchDisk* disk;
-    TranslationEntry* coreMapEntry[NumPhysPages];
+    CoreMapEntry coreMap[NumPhysPages];
     int nextSwapPage;
     PageReplacementType pageReplacementType;
 

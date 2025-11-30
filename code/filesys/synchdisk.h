@@ -40,9 +40,6 @@ class SynchDisk : public CallBackObj {
 					// then wait until the request is done.
     void WriteSector(int sectorNumber, char* data);
 
-    // entry1 point to disk sector, entry2 point to memory page
-    void Swap(TranslationEntry* entry1, TranslationEntry* entry2);
-
     int requestSector();
     void releaseSector(int sectorNumber);
     

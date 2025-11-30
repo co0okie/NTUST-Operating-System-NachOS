@@ -70,6 +70,7 @@ Thread::~Thread()
 	DeallocBoundedArray((char *) stack, StackSize * sizeof(int));
 #ifdef USER_PROGRAM
     delete space;
+    space = nullptr;
 #endif
 }
 

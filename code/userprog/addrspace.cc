@@ -82,14 +82,18 @@ AddrSpace::~AddrSpace()
 {
    for(int i = 0; i < numPages; i++)
         if (pageTable[i].valid) {
-            AddrSpace::usedPhyPage[pageTable[i].physicalPage] = false;
-            kernel->coreMapEntry[pageTable[i].physicalPage] = nullptr;
-            DEBUG(dbgVM, "Releasing ppn " << pageTable[i].physicalPage);
+            int ppn = pageTable[i].physicalPage;
+            AddrSpace::usedPhyPage[ppn] = false;
+            kernel->coreMap[ppn].ownerThread = nullptr;
+            kernel->coreMap[ppn].use = 0;
+            kernel->coreMap[ppn].lock = 0;
+            DEBUG(dbgVM, "Releasing ppn " << ppn);
         } else {
             kernel->disk->releaseSector(pageTable[i].physicalPage);
             DEBUG(dbgVM, "Releasing sector " << pageTable[i].physicalPage);
         }
    delete [] pageTable;
+   pageTable = nullptr;
 }
 
 // load segment into memory or disk swap memory
@@ -170,7 +174,19 @@ AddrSpace::Load(char *fileName)
         pageTable[i].virtualPage = i;
         while(j<NumPhysPages && AddrSpace::usedPhyPage[j] == true)
             j++;
-        if (j >= NumPhysPages) {
+        if (j < NumPhysPages) { // have free physical page
+            AddrSpace::usedPhyPage[j] = true;
+            pageTable[i].physicalPage = j;
+            kernel->coreMap[j].ownerThread = kernel->currentThread;
+            kernel->coreMap[j].vpn = i;
+            kernel->coreMap[j].use = 0;
+            kernel->coreMap[j].lock = 0;
+            pageTable[i].valid = true;
+            pageTable[i].use = 0;
+            pageTable[i].dirty = false;
+            pageTable[i].readOnly = false;
+            DEBUG(dbgVM, "vpn " << i << " -> ppn " << j);
+        } else { // no free physical page, use disk swap memory
             unsigned int sectorNo = kernel->disk->requestSector();
             pageTable[i].physicalPage = sectorNo; // disk sector number
             pageTable[i].valid = false;
@@ -178,15 +194,6 @@ AddrSpace::Load(char *fileName)
             pageTable[i].dirty = false;
             pageTable[i].readOnly = false;
             DEBUG(dbgVM, "vpn " << i << " -> sector " << sectorNo);
-        } else {
-            AddrSpace::usedPhyPage[j] = true;
-            pageTable[i].physicalPage = j;
-            kernel->coreMapEntry[j] = &pageTable[i];
-            pageTable[i].valid = true;
-            pageTable[i].use = 0;
-            pageTable[i].dirty = false;
-            pageTable[i].readOnly = false;
-            DEBUG(dbgVM, "vpn " << i << " -> ppn " << j);
         }
     }
 

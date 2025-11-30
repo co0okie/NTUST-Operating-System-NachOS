@@ -68,7 +68,9 @@ UserProgKernel::Initialize()
 #endif // FILESYS
     disk = new SynchDisk("Swap Memory");
     for (int i = 0; i < NumPhysPages; i++) {
-        coreMapEntry[i] = nullptr;
+        coreMap[i].ownerThread = nullptr;
+        coreMap[i].use = 0;
+        coreMap[i].lock = 0;
     }
     nextSwapPage = 0;
 }

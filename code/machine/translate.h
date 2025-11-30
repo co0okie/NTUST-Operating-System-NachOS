@@ -36,7 +36,7 @@ class TranslationEntry {
 			// (In other words, the entry hasn't been initialized.)
     bool readOnly;	// If this bit is set, the user program is not allowed
 			// to modify the contents of the page.
-    unsigned long long use;           // This bit is set by the hardware every time the
+    bool use;           // This bit is set by the hardware every time the
 			// page is referenced or modified.
     bool dirty;         // This bit is set by the hardware every time the
 			// page is modified.
