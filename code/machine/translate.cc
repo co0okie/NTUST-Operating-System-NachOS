@@ -190,7 +190,7 @@ int getPageToSwapLRU() {
         TranslationEntry* entry = kernel->coreMapEntry[i];
         if (entry) {
             DEBUG(dbgVM, "ppn " << i << " use " << entry->use);
-            entry->use = 0;
+            entry->use /= 2;
         }
     }
     return lruPpn;
@@ -211,49 +211,31 @@ void handlePageFault(int virtAddr, TranslationEntry* pageTable, unsigned int vpn
     TranslationEntry* entry = kernel->coreMapEntry[pageToSwap];
     int sectorToSwap = pageTable[vpn].physicalPage;
     if (kernel->pageReplacementType == PageReplacementType::LRU) {
-        pageTable[vpn].use = 0;
+        pageTable[vpn].use = 128; // set high use count to avoid being swapped soon
     }
     if (entry) { // need to swap
-        cerr << "vpn " << vpn << " is at sector " 
+        cerr << "vpn " << vpn << " -> sector " 
             << pageTable[vpn].physicalPage << ", swap with vpn " 
-            << entry->virtualPage << " at ppn " << pageToSwap << endl;
-
-        swap(pageTable[vpn].physicalPage, entry->physicalPage);
-        pageTable[vpn].valid = true;
-        entry->valid = false;
-        kernel->coreMapEntry[pageToSwap] = &pageTable[vpn];
-
-        char data[PageSize];
-        DEBUG(dbgVM, "read sector " << sectorToSwap << " to data");
-        kernel->disk->ReadSector(sectorToSwap, data);
-        DEBUG(dbgVM, "write ppn " << pageToSwap << " to sector " << sectorToSwap);
-        kernel->disk->WriteSector(
-            sectorToSwap,
-            &kernel->machine->mainMemory[pageToSwap * PageSize]
-        );
-        DEBUG(dbgVM, "write data to ppn " << pageToSwap);
-        for (int i = 0; i < PageSize; i++) {
-            kernel->machine->mainMemory[pageToSwap * PageSize + i] = data[i];
-        }
-        DEBUG(dbgVM, "After swap, vpn " << vpn << ": ppn " 
-            << pageTable[vpn].physicalPage << ", valid " << pageTable[vpn].valid
-            << "; vpn " << entry->virtualPage << ": sector "
-            << entry->physicalPage << ", valid " << entry->valid);
+            << entry->virtualPage << " -> ppn " << pageToSwap << endl;
+        kernel->disk->Swap(&pageTable[vpn], entry);
+        DEBUG(dbgVM, "After swap, vpn " << vpn << " -> ppn " 
+            << pageTable[vpn].physicalPage << " valid " << pageTable[vpn].valid
+            << "; vpn " << entry->virtualPage << " -> sector "
+            << entry->physicalPage << " valid " << entry->valid);
     } else { // load into free physical page
-        cerr << "vpn " << vpn << " is at sector " 
-            << pageTable[vpn].physicalPage << ", load into free ppn " 
-            << pageToSwap << endl;
-        DEBUG(dbgVM, "read sector " << pageTable[vpn].physicalPage);
-        kernel->disk->ReadSector(
-            pageTable[vpn].physicalPage, 
-            &kernel->machine->mainMemory[pageToSwap * PageSize]
-        );
+        cerr << "vpn " << vpn << " -> sector " << sectorToSwap << 
+            ", load into free ppn " << pageToSwap << endl;
+        DEBUG(dbgVM, "read sector " << sectorToSwap);
         kernel->disk->releaseSector(pageTable[vpn].physicalPage);
         pageTable[vpn].physicalPage = pageToSwap;
         pageTable[vpn].valid = true;
         kernel->coreMapEntry[pageToSwap] = &pageTable[vpn];
-        DEBUG(dbgVM, "After load, vpn " << vpn << ": ppn " 
-            << pageTable[vpn].physicalPage << ", valid " << pageTable[vpn].valid);
+        kernel->disk->ReadSector(
+            sectorToSwap, 
+            &kernel->machine->mainMemory[pageToSwap * PageSize]
+        );
+        DEBUG(dbgVM, "After load, vpn " << vpn << " -> ppn " 
+            << pageTable[vpn].physicalPage << " valid " << pageTable[vpn].valid);
     }
 }
 

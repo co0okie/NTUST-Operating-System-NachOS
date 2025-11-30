@@ -86,6 +86,32 @@ SynchDisk::WriteSector(int sectorNumber, char* data)
     lock->Release();
 }
 
+void SynchDisk::Swap(TranslationEntry* entry1, TranslationEntry* entry2) {
+    lock->Acquire();
+    ASSERT(!entry1->valid && entry2->valid); // one in disk, one in memory
+    int sectorToSwap = entry1->physicalPage;
+    int pageToSwap = entry2->physicalPage;
+    swap(entry1->physicalPage, entry2->physicalPage);
+    swap(entry1->valid, entry2->valid);
+    kernel->coreMapEntry[pageToSwap] = entry1;
+
+    char data[PageSize];
+    DEBUG(dbgVM, "read sector " << sectorToSwap << " to data");
+    disk->ReadRequest(sectorToSwap, data);
+    semaphore->P();
+    DEBUG(dbgVM, "write ppn " << pageToSwap << " to sector " << sectorToSwap);
+    disk->WriteRequest(
+        sectorToSwap,
+        &kernel->machine->mainMemory[pageToSwap * PageSize]
+    );
+    DEBUG(dbgVM, "write data to ppn " << pageToSwap);
+    for (int i = 0; i < PageSize; i++) {
+        kernel->machine->mainMemory[pageToSwap * PageSize + i] = data[i];
+    }
+    semaphore->P();
+    lock->Release();
+}
+
 int SynchDisk::requestSector() {
     for (int i = 0; i < NumSectors; i++) {
         if (used[i]) continue;
