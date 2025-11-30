@@ -81,7 +81,12 @@ AddrSpace::AddrSpace()
 AddrSpace::~AddrSpace()
 {
    for(int i = 0; i < numPages; i++)
-        AddrSpace::usedPhyPage[pageTable[i].physicalPage] = false;
+        if (pageTable[i].valid) {
+            AddrSpace::usedPhyPage[pageTable[i].physicalPage] = false;
+            kernel->coreMapEntry[pageTable[i].physicalPage] = nullptr;
+        } else {
+            kernel->disk->releaseSector(pageTable[i].physicalPage);
+        }
    delete pageTable;
 }
 
@@ -102,12 +107,16 @@ void loadSegment(Segment segment, OpenFile* executable, TranslationEntry *pageTa
                 &kernel->machine->mainMemory[physicalAddr],
                 size, position
             );
+            DEBUG(dbgVM, "load " << size << " from va " << readBeginVirAddr <<
+                " to pa " << physicalAddr);
         } else { // load into disk swap memory
             char data[PageSize];
             kernel->disk->ReadSector(pageTable[vpn].physicalPage, data);
             char* readBegin = data + readBeginVirAddr % PageSize;
             executable->ReadAt(readBegin, size, position);
             kernel->disk->WriteSector(pageTable[vpn].physicalPage, data);
+            DEBUG(dbgVM, "load " << size << " from va " << readBeginVirAddr <<
+                " to sector " << pageTable[vpn].physicalPage);
         }
         readBeginVirAddr = readEndVirAddr;
     }
@@ -147,7 +156,11 @@ AddrSpace::Load(char *fileName)
     numPages = divRoundUp(size, PageSize);
 //	cout << "number of pages of " << fileName<< " is "<<numPages<<endl;
     size = numPages * PageSize;
-
+    DEBUG(dbgVM, fileName << ":")
+    DEBUG(dbgVM, "size: " << noffH.code.size << " + " << noffH.initData.size 
+        << " + " << noffH.uninitData.size << " + " << UserStackSize
+        << " = " << size);
+    DEBUG(dbgVM, "numPages: " << numPages);
     numPages = divRoundUp(size,PageSize);
     for(unsigned int i=0, j=0; i<numPages; i++){
         pageTable[i].virtualPage = i;
@@ -160,6 +173,7 @@ AddrSpace::Load(char *fileName)
             pageTable[i].use = false;
             pageTable[i].dirty = false;
             pageTable[i].readOnly = false;
+            DEBUG(dbgVM, "vpn " << i << " -> sector " << sectorNo);
         } else {
             AddrSpace::usedPhyPage[j] = true;
             pageTable[i].physicalPage = j;
@@ -168,6 +182,7 @@ AddrSpace::Load(char *fileName)
             pageTable[i].use = false;
             pageTable[i].dirty = false;
             pageTable[i].readOnly = false;
+            DEBUG(dbgVM, "vpn " << i << " -> ppn " << j);
         }
     }
 
@@ -267,6 +282,8 @@ AddrSpace::InitRegisters()
 
 void AddrSpace::SaveState() 
 {
+    DEBUG(dbgVM, "pageTable = " << kernel->machine->pageTable
+        << " -> " << pageTable);
         pageTable=kernel->machine->pageTable;
         numPages=kernel->machine->pageTableSize;
 }
@@ -281,6 +298,8 @@ void AddrSpace::SaveState()
 
 void AddrSpace::RestoreState() 
 {
+    DEBUG(dbgVM, "kernel->machine->pageTable = " << kernel->machine->pageTable
+        << " -> " << pageTable);
     kernel->machine->pageTable = pageTable;
     kernel->machine->pageTableSize = numPages;
 }

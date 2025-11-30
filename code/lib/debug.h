@@ -29,6 +29,8 @@ const char dbgFile = 'f'; 		// file system (FILESYS)
 const char dbgAddr = 'a'; 		// address spaces (USER_PROGRAM)
 const char dbgNet = 'n'; 		// network emulation (NETWORK)
 
+const char dbgVM = 'v';	// virtual memory
+
 class Debug {
   public:
     Debug(char *flagList);
@@ -48,7 +50,7 @@ extern Debug *debug;
 //----------------------------------------------------------------------
 #define DEBUG(flag,expr)                                                     \
     if (!debug->IsEnabled(flag)) {} else { 				\
-        cerr << expr << "\n";   				        \
+        cerr << expr << endl;   				        \
     }
 
 

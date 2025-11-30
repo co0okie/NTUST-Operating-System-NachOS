@@ -94,6 +94,10 @@ int SynchDisk::requestSector() {
     }
 }
 
+void SynchDisk::releaseSector(int sectorNumber) {
+    used[sectorNumber] = false;
+}
+
 //----------------------------------------------------------------------
 // SynchDisk::CallBack
 // 	Disk interrupt handler.  Wake up any thread waiting for the disk

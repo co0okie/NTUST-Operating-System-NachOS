@@ -166,6 +166,49 @@ Machine::WriteMem(int addr, int size, int value)
     return TRUE;
 }
 
+void handlePageFault(int virtAddr, TranslationEntry* pageTable, unsigned int vpn) {
+    DEBUG(dbgAddr, "Page Fault at # " << virtAddr);
+    cerr << "page fault" << endl;
+    TranslationEntry* entry = kernel->coreMapEntry[kernel->nextSwapPage];
+    if (entry) { // need to swap
+        cerr << "vpn " << vpn << " is at sector " 
+            << pageTable[vpn].physicalPage << ", swap with vpn " 
+            << entry->virtualPage << " at ppn " << kernel->nextSwapPage << endl;
+        char data[PageSize];
+        kernel->disk->ReadSector(pageTable[vpn].physicalPage, data);
+        kernel->disk->WriteSector(
+            pageTable[vpn].physicalPage,
+            &kernel->machine->mainMemory[entry->physicalPage * PageSize]
+        );
+        for (int i = 0; i < PageSize; i++) {
+            kernel->machine->mainMemory[entry->physicalPage * PageSize + i] = data[i];
+        }
+        swap(pageTable[vpn].physicalPage, entry->physicalPage);
+        pageTable[vpn].valid = true;
+        entry->valid = false;
+        kernel->coreMapEntry[kernel->nextSwapPage] = &pageTable[vpn];
+        DEBUG(dbgVM, "After swap, vpn " << vpn << ": ppn " 
+            << pageTable[vpn].physicalPage << ", valid " << pageTable[vpn].valid
+            << "; vpn " << entry->virtualPage << ": sector "
+            << entry->physicalPage << ", valid " << entry->valid);
+    } else { // load into free physical page
+        cerr << "vpn " << vpn << " is at sector " 
+            << pageTable[vpn].physicalPage << ", load into free ppn " 
+            << kernel->nextSwapPage << endl;
+        kernel->disk->ReadSector(
+            pageTable[vpn].physicalPage, 
+            &kernel->machine->mainMemory[kernel->nextSwapPage * PageSize]
+        );
+        kernel->disk->releaseSector(pageTable[vpn].physicalPage);
+        pageTable[vpn].physicalPage = kernel->nextSwapPage;
+        pageTable[vpn].valid = true;
+        kernel->coreMapEntry[kernel->nextSwapPage] = &pageTable[vpn];
+        DEBUG(dbgVM, "After load, vpn " << vpn << ": ppn " 
+            << pageTable[vpn].physicalPage << ", valid " << pageTable[vpn].valid);
+    }
+    kernel->nextSwapPage = (kernel->nextSwapPage + 1) % NumPhysPages;
+}
+
 //----------------------------------------------------------------------
 // Machine::Translate
 // 	Translate a virtual address into a physical address, using 
@@ -207,38 +250,16 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
     offset = (unsigned) virtAddr % PageSize;
     
     if (tlb == NULL) {		// => page table => vpn is index into table
-	if (vpn >= pageTableSize) {
-	    DEBUG(dbgAddr, "Illegal virtual page # " << virtAddr);
-	    return AddressErrorException;
-	} else if (!pageTable[vpn].valid) {
-	    DEBUG(dbgAddr, "Page Fault at # " << virtAddr);
-        TranslationEntry* entry = kernel->coreMapEntry[kernel->nextSwapPage];
-        if (!entry) {
-            cerr << "haha there gonna be a segmentation fault!" << endl;
+        DEBUG(dbgVM, pageTable << ", " << virtAddr << " = " << vpn << ":" << offset << " valid " <<
+            pageTable[vpn].valid << " pageNo " << pageTable[vpn].physicalPage);
+        if (vpn >= pageTableSize) {
+            DEBUG(dbgAddr, "Illegal virtual page # " << virtAddr);
+            return AddressErrorException;
+        } else if (!pageTable[vpn].valid) {
+            handlePageFault(virtAddr, pageTable, vpn);
+            return PageFaultException;
         }
-        cerr << "page fault" << endl;
-        cerr << "vpn " << pageTable[vpn].virtualPage << " is at sector " 
-            << pageTable[vpn].physicalPage << ", swap with vpn " 
-            << entry->virtualPage << " at ppn " << kernel->nextSwapPage << endl;
-        char data[PageSize];
-        kernel->disk->ReadSector(pageTable[vpn].physicalPage, data);
-        kernel->disk->WriteSector(
-            pageTable[vpn].physicalPage, 
-            &kernel->machine->mainMemory[entry->physicalPage * PageSize]
-        );
-        for (int i = 0; i < PageSize; i++) {
-            kernel->machine->mainMemory[entry->physicalPage * PageSize + i] = data[i];
-        }
-        swap(pageTable[vpn].physicalPage, entry->physicalPage);
-        pageTable[vpn].valid = true;
-        entry->valid = false;
-        kernel->coreMapEntry[kernel->nextSwapPage] = &pageTable[vpn];
-
-        kernel->nextSwapPage = (kernel->nextSwapPage + 1) % NumPhysPages;
-
-        return PageFaultException;
-	}
-	entry = &pageTable[vpn];
+	    entry = &pageTable[vpn];
     } else {
         for (entry = NULL, i = 0; i < TLBSize; i++)
     	    if (tlb[i].valid && (tlb[i].virtualPage == vpn)) {

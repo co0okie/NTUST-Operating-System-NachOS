@@ -41,6 +41,7 @@ class SynchDisk : public CallBackObj {
     void WriteSector(int sectorNumber, char* data);
 
     int requestSector();
+    void releaseSector(int sectorNumber);
     
     void CallBack();			// Called by the disk device interrupt
 					// handler, to signal that the
