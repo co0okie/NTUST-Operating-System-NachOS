@@ -45,7 +45,7 @@ Thread::Thread(char* threadName)
 					// of machine registers
     }
 #ifdef USER_PROGRAM
-    space = NULL;
+    space = new AddrSpace();
 #endif
 }
 
@@ -68,6 +68,9 @@ Thread::~Thread()
     ASSERT(this != kernel->currentThread);
     if (stack != NULL)
 	DeallocBoundedArray((char *) stack, StackSize * sizeof(int));
+#ifdef USER_PROGRAM
+    delete space;
+#endif
 }
 
 //----------------------------------------------------------------------

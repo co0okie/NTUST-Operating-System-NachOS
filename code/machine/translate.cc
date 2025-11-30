@@ -170,23 +170,31 @@ void handlePageFault(int virtAddr, TranslationEntry* pageTable, unsigned int vpn
     DEBUG(dbgAddr, "Page Fault at # " << virtAddr);
     cerr << "page fault" << endl;
     TranslationEntry* entry = kernel->coreMapEntry[kernel->nextSwapPage];
+    int pageToSwap = kernel->nextSwapPage;
+    int sectorToSwap = pageTable[vpn].physicalPage;
+    kernel->nextSwapPage = (kernel->nextSwapPage + 1) % NumPhysPages;
     if (entry) { // need to swap
         cerr << "vpn " << vpn << " is at sector " 
             << pageTable[vpn].physicalPage << ", swap with vpn " 
-            << entry->virtualPage << " at ppn " << kernel->nextSwapPage << endl;
-        char data[PageSize];
-        kernel->disk->ReadSector(pageTable[vpn].physicalPage, data);
-        kernel->disk->WriteSector(
-            pageTable[vpn].physicalPage,
-            &kernel->machine->mainMemory[entry->physicalPage * PageSize]
-        );
-        for (int i = 0; i < PageSize; i++) {
-            kernel->machine->mainMemory[entry->physicalPage * PageSize + i] = data[i];
-        }
+            << entry->virtualPage << " at ppn " << pageToSwap << endl;
+
         swap(pageTable[vpn].physicalPage, entry->physicalPage);
         pageTable[vpn].valid = true;
         entry->valid = false;
-        kernel->coreMapEntry[kernel->nextSwapPage] = &pageTable[vpn];
+        kernel->coreMapEntry[pageToSwap] = &pageTable[vpn];
+
+        char data[PageSize];
+        DEBUG(dbgVM, "read sector " << sectorToSwap << " to data");
+        kernel->disk->ReadSector(sectorToSwap, data);
+        DEBUG(dbgVM, "write ppn " << pageToSwap << " to sector " << sectorToSwap);
+        kernel->disk->WriteSector(
+            sectorToSwap,
+            &kernel->machine->mainMemory[pageToSwap * PageSize]
+        );
+        DEBUG(dbgVM, "write data to ppn " << pageToSwap);
+        for (int i = 0; i < PageSize; i++) {
+            kernel->machine->mainMemory[pageToSwap * PageSize + i] = data[i];
+        }
         DEBUG(dbgVM, "After swap, vpn " << vpn << ": ppn " 
             << pageTable[vpn].physicalPage << ", valid " << pageTable[vpn].valid
             << "; vpn " << entry->virtualPage << ": sector "
@@ -194,19 +202,19 @@ void handlePageFault(int virtAddr, TranslationEntry* pageTable, unsigned int vpn
     } else { // load into free physical page
         cerr << "vpn " << vpn << " is at sector " 
             << pageTable[vpn].physicalPage << ", load into free ppn " 
-            << kernel->nextSwapPage << endl;
+            << pageToSwap << endl;
+        DEBUG(dbgVM, "read sector " << pageTable[vpn].physicalPage);
         kernel->disk->ReadSector(
             pageTable[vpn].physicalPage, 
-            &kernel->machine->mainMemory[kernel->nextSwapPage * PageSize]
+            &kernel->machine->mainMemory[pageToSwap * PageSize]
         );
         kernel->disk->releaseSector(pageTable[vpn].physicalPage);
-        pageTable[vpn].physicalPage = kernel->nextSwapPage;
+        pageTable[vpn].physicalPage = pageToSwap;
         pageTable[vpn].valid = true;
-        kernel->coreMapEntry[kernel->nextSwapPage] = &pageTable[vpn];
+        kernel->coreMapEntry[pageToSwap] = &pageTable[vpn];
         DEBUG(dbgVM, "After load, vpn " << vpn << ": ppn " 
             << pageTable[vpn].physicalPage << ", valid " << pageTable[vpn].valid);
     }
-    kernel->nextSwapPage = (kernel->nextSwapPage + 1) % NumPhysPages;
 }
 
 //----------------------------------------------------------------------
@@ -250,8 +258,8 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
     offset = (unsigned) virtAddr % PageSize;
     
     if (tlb == NULL) {		// => page table => vpn is index into table
-        DEBUG(dbgVM, pageTable << ", " << virtAddr << " = " << vpn << ":" << offset << " valid " <<
-            pageTable[vpn].valid << " pageNo " << pageTable[vpn].physicalPage);
+        // DEBUG(dbgVM, pageTable << ", " << virtAddr << " = " << vpn << ":" << offset << " valid " <<
+        //     pageTable[vpn].valid << " pageNo " << pageTable[vpn].physicalPage);
         if (vpn >= pageTableSize) {
             DEBUG(dbgAddr, "Illegal virtual page # " << virtAddr);
             return AddressErrorException;

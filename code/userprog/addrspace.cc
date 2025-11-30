@@ -84,10 +84,12 @@ AddrSpace::~AddrSpace()
         if (pageTable[i].valid) {
             AddrSpace::usedPhyPage[pageTable[i].physicalPage] = false;
             kernel->coreMapEntry[pageTable[i].physicalPage] = nullptr;
+            DEBUG(dbgVM, "Releasing ppn " << pageTable[i].physicalPage);
         } else {
             kernel->disk->releaseSector(pageTable[i].physicalPage);
+            DEBUG(dbgVM, "Releasing sector " << pageTable[i].physicalPage);
         }
-   delete pageTable;
+   delete [] pageTable;
 }
 
 // load segment into memory or disk swap memory
@@ -111,9 +113,11 @@ void loadSegment(Segment segment, OpenFile* executable, TranslationEntry *pageTa
                 " to pa " << physicalAddr);
         } else { // load into disk swap memory
             char data[PageSize];
+            DEBUG(dbgVM, "read sector " << pageTable[vpn].physicalPage);
             kernel->disk->ReadSector(pageTable[vpn].physicalPage, data);
             char* readBegin = data + readBeginVirAddr % PageSize;
             executable->ReadAt(readBegin, size, position);
+            DEBUG(dbgVM, "write sector " << pageTable[vpn].physicalPage);
             kernel->disk->WriteSector(pageTable[vpn].physicalPage, data);
             DEBUG(dbgVM, "load " << size << " from va " << readBeginVirAddr <<
                 " to sector " << pageTable[vpn].physicalPage);

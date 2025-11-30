@@ -145,7 +145,7 @@ Scheduler::Run (Thread *nextThread, bool finishing)
 #ifdef USER_PROGRAM			// ignore until running user programs 
     if (oldThread->space != NULL) {	// if this thread is a user program,
         oldThread->SaveUserState(); 	// save the user's CPU registers
-	oldThread->space->SaveState();
+        // oldThread->space->SaveState();
     }
 #endif
     
