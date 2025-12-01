@@ -49,12 +49,12 @@ class Statistics {
 // in the kernel measured by the number of calls to enable interrupts,
 // these time constants are none too exact.
 
-const int UserTick = 	   1;	// advance for each user-level instruction 
+const int UserTick = 	  20;	// advance for each user-level instruction 
 const int SystemTick =	  10; 	// advance each time interrupts are enabled
 const int RotationTime = 500; 	// time disk takes to rotate one sector
 const int SeekTime =	 500;  	// time disk takes to seek past one track
 const int ConsoleTime =	 100;	// time to read or write one character
 const int NetworkTime =	 100;  	// time to send or receive one packet
-const int TimerTicks = 	2000;  	// (average) time between timer interrupts
+const int TimerTicks = 	3000;  	// (average) time between timer interrupts
 
 #endif // STATS_H
