@@ -165,9 +165,14 @@ AddrSpace::Load(char *fileName)
 //	cout << "number of pages of " << fileName<< " is "<<numPages<<endl;
     size = numPages * PageSize;
     DEBUG(dbgVM, fileName << ":")
-    DEBUG(dbgVM, "size: " << noffH.code.size << " + " << noffH.initData.size 
-        << " + " << noffH.uninitData.size << " + " << UserStackSize
-        << " = " << size);
+    DEBUG(dbgVM, "size: " << noffH.code.size << " (code) + " << noffH.initData.size 
+        << " (init) + " << noffH.uninitData.size << " (uninit) + " << UserStackSize
+        << " (stack) = " << size);
+    DEBUG(dbgVM, "code segment: [" << noffH.code.virtualAddr << ", " << noffH.code.virtualAddr + noffH.code.size << ")");
+    if (noffH.initData.size > 0)
+    DEBUG(dbgVM, "init segment: [" << noffH.initData.virtualAddr << ", " << noffH.initData.virtualAddr + noffH.initData.size << ")");
+    if (noffH.uninitData.size > 0)
+    DEBUG(dbgVM, "uninit segment: [" << noffH.uninitData.virtualAddr << ", " << noffH.uninitData.virtualAddr + noffH.uninitData.size << ")");
     DEBUG(dbgVM, "numPages: " << numPages);
     numPages = divRoundUp(size,PageSize);
     for(unsigned int i=0, j=0; i<numPages; i++){

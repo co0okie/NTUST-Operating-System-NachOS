@@ -207,9 +207,20 @@ ExceptionHandler(ExceptionType which)
         kernel->stats->numPageFaults++;
         return;
     }
-	default:
+	default: {
 	    cerr << "Unexpected user mode exception " << which << "\n";
+        int va = kernel->machine->ReadRegister(BadVAddrReg);
+        int pc = kernel->machine->ReadRegister(PCReg);
+        int at = kernel->machine->ReadRegister(1);
+        int instr;
+        kernel->machine->ReadMem(pc, 4, &instr);
+        DEBUG(dbgVM, "instr = " << hex << instr << dec);
+        DEBUG(dbgVM, "atReg = " << at);
+        DEBUG(dbgVM, "at " << kernel->currentThread->getName() << 
+            " PC " << kernel->machine->ReadRegister(PCReg) <<
+            " BadVAddr " << va << " = " << va / PageSize << ":" << va % PageSize);
 	    break;
+    }
     }
     ASSERTNOTREACHED();
 }

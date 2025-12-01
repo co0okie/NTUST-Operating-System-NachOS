@@ -1,6 +1,6 @@
 #include "syscall.h"
 
-#define arr_size 128 / sizeof(short) * 4
+#define arr_size 128 / sizeof(short) * 8
 short arr[arr_size];
 int i, j;
 
