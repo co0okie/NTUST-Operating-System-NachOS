@@ -69,7 +69,7 @@ UserProgKernel::Initialize()
     disk = new SynchDisk("Swap Memory");
     for (int i = 0; i < NumPhysPages; i++) {
         coreMap[i].ownerThread = nullptr;
-        coreMap[i].use = 0;
+        coreMap[i].lastAccessTick = 0;
         coreMap[i].lock = 0;
     }
     nextSwapPage = 0;

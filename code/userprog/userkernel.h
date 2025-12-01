@@ -25,7 +25,7 @@ enum class PageReplacementType {
 struct CoreMapEntry {
     Thread* ownerThread;
     int vpn; // virtual page number
-    unsigned long long use;
+    unsigned long long lastAccessTick;
     // if lock = 1, this page is being swapped in so cannot be replaced
     bool lock;
 };

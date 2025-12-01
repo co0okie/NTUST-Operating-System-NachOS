@@ -85,7 +85,7 @@ AddrSpace::~AddrSpace()
             int ppn = pageTable[i].physicalPage;
             AddrSpace::usedPhyPage[ppn] = false;
             kernel->coreMap[ppn].ownerThread = nullptr;
-            kernel->coreMap[ppn].use = 0;
+            kernel->coreMap[ppn].lastAccessTick = 0;
             kernel->coreMap[ppn].lock = 0;
             DEBUG(dbgVM, "Releasing ppn " << ppn);
         } else {
@@ -179,7 +179,7 @@ AddrSpace::Load(char *fileName)
             pageTable[i].physicalPage = j;
             kernel->coreMap[j].ownerThread = kernel->currentThread;
             kernel->coreMap[j].vpn = i;
-            kernel->coreMap[j].use = 0;
+            kernel->coreMap[j].lastAccessTick = 0;
             kernel->coreMap[j].lock = 0;
             pageTable[i].valid = true;
             pageTable[i].use = 0;

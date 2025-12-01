@@ -1,11 +1,13 @@
 #include "syscall.h"
 
-int	n = 10, m = 20;
+#define arr_size 128 / sizeof(short) * 4
+short arr[arr_size];
+int i, j;
 
-main()
-{
-    for (n=1000;n<1200;n++) {
-        for (m=0;m<50;m++);
-        PrintInt(n);
+main() {
+    for (i=0; i<arr_size;i++) {
+        for (j=0;j<50;j++);
+        arr[i] = i;
+        PrintInt(10000 + i);
     }
 }

@@ -166,113 +166,6 @@ Machine::WriteMem(int addr, int size, int value)
     return TRUE;
 }
 
-int getPageToSwap() {
-    switch (kernel->pageReplacementType) {
-    case PageReplacementType::LRU: {
-        for (unsigned int i = 0; i < NumPhysPages; i++) {
-            CoreMapEntry& cmEntry = kernel->coreMap[i];
-            if (!cmEntry.ownerThread) {
-                DEBUG(dbgVM, "ppn " << i << " is free");
-                continue;
-            }
-            TranslationEntry* entry = &cmEntry.ownerThread->space->pageTable[cmEntry.vpn];
-            DEBUG(dbgVM, cmEntry.ownerThread->getName() << " vpn " << cmEntry.vpn << 
-                " -> ppn " << i << " use " << cmEntry.use << 
-                (cmEntry.lock ? " (locked)" : ""));
-        }
-
-        size_t lruUse = -1ull;
-        int lruPpn = -1;
-        for (unsigned int i = 0; i < NumPhysPages; i++) {
-            CoreMapEntry& cmEntry = kernel->coreMap[i];
-            if (!cmEntry.ownerThread) { // free page
-                lruPpn = i;
-                break;
-            }
-            if (cmEntry.lock) continue; // being swapped in, don't choose
-            if (cmEntry.use < lruUse) {
-                lruUse = cmEntry.use;
-                lruPpn = i;
-            }
-        }
-    
-        // Aging: halve the use bits of all pages every timer interrupt
-        for (unsigned int i = 0; i < NumPhysPages; i++) {
-            CoreMapEntry& cmEntry = kernel->coreMap[i];
-            cmEntry.use /= 2;
-        }
-        return lruPpn;
-    }
-    case PageReplacementType::FIFO:
-    default: {
-        int pageToSwap = kernel->nextSwapPage;
-        if (kernel->coreMap[pageToSwap].lock) {
-            return -1;
-        }
-        kernel->nextSwapPage = (kernel->nextSwapPage + 1) % NumPhysPages;
-        return pageToSwap;
-    }
-    }
-}
-
-void handlePageFault(TranslationEntry* requestEntry) {
-    cerr << "page fault" << endl;
-    int pageToSwap = getPageToSwap();
-    if (pageToSwap == -1) {
-        DEBUG(dbgVM, "No page to swap!");
-        return;
-    }
-    CoreMapEntry& cmEntry = kernel->coreMap[pageToSwap];
-    cmEntry.lock = 1; // lock this page during swap
-    int sectorToSwap = requestEntry->physicalPage;
-    if (cmEntry.ownerThread) { // need to swap
-        TranslationEntry* evictEntry = &cmEntry.ownerThread->space->pageTable[cmEntry.vpn];
-        cout << "vpn " << requestEntry->virtualPage << " -> sector " 
-            << requestEntry->physicalPage << ", swap with " << cmEntry.ownerThread->getName()
-            << " vpn " << evictEntry->virtualPage << " -> ppn " << evictEntry->physicalPage << endl;
-        
-        ASSERT(!requestEntry->valid && evictEntry->valid); // one in disk, one in memory
-
-        swap(requestEntry->physicalPage, evictEntry->physicalPage);
-        swap(requestEntry->valid, evictEntry->valid);
-
-        DEBUG(dbgVM, "write ppn " << pageToSwap << " to buffer");
-        char buffer[PageSize];
-        for (int i = 0; i < PageSize; i++) {
-            buffer[i] = kernel->machine->mainMemory[pageToSwap * PageSize + i];
-        }
-        DEBUG(dbgVM, "write sector " << sectorToSwap << " to ppn " << pageToSwap);
-        kernel->disk->ReadSector(
-            sectorToSwap, 
-            &kernel->machine->mainMemory[pageToSwap * PageSize]
-        );
-        DEBUG(dbgVM, "write buffer to sector " << sectorToSwap);
-        kernel->disk->WriteSector(sectorToSwap, buffer);
-
-        DEBUG(dbgVM, "After swap, vpn " << requestEntry->virtualPage << " -> ppn " 
-            << requestEntry->physicalPage << " valid " << requestEntry->valid
-            << "; " << cmEntry.ownerThread->getName() << " vpn " << evictEntry->virtualPage << " -> sector "
-            << evictEntry->physicalPage << " valid " << evictEntry->valid);
-    } else { // load into free physical page
-        cerr << "vpn " << requestEntry->virtualPage << " -> sector " << 
-            sectorToSwap << ", load into free ppn " << pageToSwap << endl;
-        DEBUG(dbgVM, "read sector " << sectorToSwap);
-        kernel->disk->ReadSector(
-            sectorToSwap, 
-            &kernel->machine->mainMemory[pageToSwap * PageSize]
-        );
-        requestEntry->physicalPage = pageToSwap;
-        requestEntry->valid = true;
-        kernel->disk->releaseSector(sectorToSwap);
-        DEBUG(dbgVM, "After load, vpn " << requestEntry->virtualPage << " -> ppn " 
-            << requestEntry->physicalPage << " valid " << requestEntry->valid);
-    }
-    cmEntry.ownerThread = kernel->currentThread;
-    cmEntry.vpn = requestEntry->virtualPage;
-    cmEntry.use = 2;
-    cmEntry.lock = 0; // unlock this page
-}
-
 //----------------------------------------------------------------------
 // Machine::Translate
 // 	Translate a virtual address into a physical address, using 
@@ -321,7 +214,6 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
             return AddressErrorException;
         } else if (!pageTable[vpn].valid) {
             DEBUG(dbgAddr, "Page Fault at # " << virtAddr);
-            handlePageFault(&pageTable[vpn]);
             return PageFaultException;
         }
 	    entry = &pageTable[vpn];
@@ -352,7 +244,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 	return BusErrorException;
     }
     entry->use = true;		// set the use, dirty bits
-    kernel->coreMap[pageFrame].use++;
+    kernel->coreMap[pageFrame].lastAccessTick = kernel->stats->totalTicks;
     if (writing)
 	entry->dirty = TRUE;
     *physAddr = pageFrame * PageSize + offset;
