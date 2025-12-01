@@ -80,17 +80,17 @@ AddrSpace::AddrSpace()
 
 AddrSpace::~AddrSpace()
 {
-   for(int i = 0; i < numPages; i++)
-        if (pageTable[i].valid) {
-            int ppn = pageTable[i].physicalPage;
+   for(int vpn = 0; vpn < numPages; vpn++)
+        if (pageTable[vpn].valid) {
+            int ppn = pageTable[vpn].physicalPage;
             AddrSpace::usedPhyPage[ppn] = false;
             kernel->coreMap[ppn].ownerThread = nullptr;
             kernel->coreMap[ppn].lastAccessTick = 0;
             kernel->coreMap[ppn].lock = 0;
             DEBUG(dbgVM, "Releasing ppn " << ppn);
         } else {
-            kernel->disk->releaseSector(pageTable[i].physicalPage);
-            DEBUG(dbgVM, "Releasing sector " << pageTable[i].physicalPage);
+            kernel->disk->releaseSector(pageTable[vpn].physicalPage);
+            DEBUG(dbgVM, "Releasing sector " << pageTable[vpn].physicalPage);
         }
    delete [] pageTable;
    pageTable = nullptr;
@@ -115,7 +115,7 @@ void loadSegment(Segment segment, OpenFile* executable, TranslationEntry *pageTa
             );
             DEBUG(dbgVM, "load " << size << " from va " << readBeginVirAddr <<
                 " to pa " << physicalAddr);
-        } else { // load into disk swap memory
+        } else { // load into disk swap space
             char data[PageSize];
             DEBUG(dbgVM, "read sector " << pageTable[vpn].physicalPage);
             kernel->disk->ReadSector(pageTable[vpn].physicalPage, data);
@@ -175,31 +175,27 @@ AddrSpace::Load(char *fileName)
     DEBUG(dbgVM, "uninit segment: [" << noffH.uninitData.virtualAddr << ", " << noffH.uninitData.virtualAddr + noffH.uninitData.size << ")");
     DEBUG(dbgVM, "numPages: " << numPages);
     numPages = divRoundUp(size,PageSize);
-    for(unsigned int i=0, j=0; i<numPages; i++){
-        pageTable[i].virtualPage = i;
-        while(j<NumPhysPages && AddrSpace::usedPhyPage[j] == true)
-            j++;
-        if (j < NumPhysPages) { // have free physical page
-            AddrSpace::usedPhyPage[j] = true;
-            pageTable[i].physicalPage = j;
-            kernel->coreMap[j].ownerThread = kernel->currentThread;
-            kernel->coreMap[j].vpn = i;
-            kernel->coreMap[j].lastAccessTick = 0;
-            kernel->coreMap[j].lock = 0;
-            pageTable[i].valid = true;
-            pageTable[i].use = 0;
-            pageTable[i].dirty = false;
-            pageTable[i].readOnly = false;
-            DEBUG(dbgVM, "vpn " << i << " -> ppn " << j);
-        } else { // no free physical page, use disk swap memory
+    for(unsigned int vpn = 0, ppn = 0; vpn < numPages; vpn++) {
+        pageTable[vpn].virtualPage = vpn;
+        while(ppn < NumPhysPages && AddrSpace::usedPhyPage[ppn] == true) ppn++;
+        if (ppn < NumPhysPages) { // have free physical page
+            AddrSpace::usedPhyPage[ppn] = true;
+            pageTable[vpn].physicalPage = ppn;
+            kernel->coreMap[ppn].ownerThread = kernel->currentThread;
+            kernel->coreMap[ppn].vpn = vpn;
+            kernel->coreMap[ppn].lastAccessTick = 0;
+            kernel->coreMap[ppn].lock = 0;
+            pageTable[vpn].valid = true;
+            DEBUG(dbgVM, "vpn " << vpn << " -> ppn " << ppn);
+        } else { // no free physical page, use disk swap space
             unsigned int sectorNo = kernel->disk->requestSector();
-            pageTable[i].physicalPage = sectorNo; // disk sector number
-            pageTable[i].valid = false;
-            pageTable[i].use = 0;
-            pageTable[i].dirty = false;
-            pageTable[i].readOnly = false;
-            DEBUG(dbgVM, "vpn " << i << " -> sector " << sectorNo);
+            pageTable[vpn].physicalPage = sectorNo; // disk sector number
+            pageTable[vpn].valid = false;
+            DEBUG(dbgVM, "vpn " << vpn << " -> sector " << sectorNo);
         }
+        pageTable[vpn].use = false;
+        pageTable[vpn].dirty = false;
+        pageTable[vpn].readOnly = false;
     }
 
     size = numPages * PageSize;
